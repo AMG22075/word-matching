@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSV Keyword Checker</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    textarea, input[type="file"] { width: 100%; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>CSV Keyword Checker</h2>
+
+  <input type="file" id="csvFile" accept=".csv" onchange="resetState()" />
+  <textarea id="keywords" rows="5" placeholder="Paste keywords, one per line"></textarea>
+  <button onclick="processCSV()">Process</button>
+
+  <button id="downloadLink" style="display:none;">Download Result</button>
+
+  <script>
+    let currentURL = null;
+
+    function resetState() {
+      const downloadLink = document.getElementById("downloadLink");
+      if (currentURL) {
+        URL.revokeObjectURL(currentURL);
+        currentURL = null;
+      }
+      downloadLink.style.display = "none";
+    }
+
+    function escapeCSVValue(value) {
+      return value.replace(/\"/g, '\"\"');
+    }
+
+    function escapeRegExp(str) {
+      return str.replace(/[.*+?^=!:${}()|\[\]\/\\]/g, '\\$&');
+    }
+
+    function processCSV() {
+      resetState();
+
+      const fileInput = document.getElementById("csvFile");
+      const file = fileInput.files[0];
+      const keywords = document.getElementById("keywords").value
+        .split(/\n|,/) // support both comma and newline separation
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
+
+      if (!file || keywords.length === 0) {
+        alert("Please upload a CSV and enter keywords.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const lines = e.target.result.split(/\r?\n/);
+        if (lines.length === 0) return;
+
+        const result = [];
+
+        // Add header
+        const firstLine = lines[0].split(",");
+        const header = [...firstLine, "Matched Keywords", "Match Count"];
+        result.push(header.join(","));
+
+        // Prepare regex for whole word matching
+        const keywordPatterns = keywords.map(kw => `\\b${escapeRegExp(kw)}\\b`).join("|");
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
+          if (!line.trim()) continue;
+
+          // Keep the original string intact
+          const rowText = line;
+
+          const matchedKeywords = keywords.filter(kw => new RegExp(`\\b${escapeRegExp(kw)}\\b`).test(rowText));
+          const totalCount = matchedKeywords.length;
+
+          // Add matched keywords and count of matches
+          const matchedString = matchedKeywords.join(";");
+          const countString = String(totalCount);
+
+          result.push([line, matchedString, countString].join(","));
+        }
+
+        const blob = new Blob([result.join("\n")], { type: 'text/csv' });
+        currentURL = URL.createObjectURL(blob);
+
+        const downloadLink = document.getElementById("downloadLink");
+        downloadLink.onclick = function () {
+          const a = document.createElement("a");
+          a.href = currentURL;
+          a.download = "matching-words.csv"; // Download file name
+          a.click();
+        };
+        downloadLink.style.display = "inline-block";
+      };
+
+      reader.readAsText(file);
+    }
+  </script>
+</body>
+</html>
